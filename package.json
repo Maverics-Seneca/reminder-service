@@ -1,0 +1,12 @@
+{
+    "name": "reminder-service",
+    "version": "1.0.0",
+    "description": "Reminder Service sends notifications and reminders.",
+    "main": "server.js",
+    "scripts": {
+      "start": "node server.js"
+    },
+    "dependencies": {
+      "express": "^4.21.2"
+    }
+  }
