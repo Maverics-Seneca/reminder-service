@@ -72,10 +72,12 @@ app.get('/reminders/:userId', async (req, res) => {
     try {
         const snapshot = await db.collection('reminders')
             .where('userId', '==', userId)
+            .orderBy('datetime', 'asc')
             .get();
 
         if (snapshot.empty) {
-            return res.status(404).json({ message: 'No reminders found for this user' });
+            console.log('No reminders found for userId:', userId);
+            return res.json({ userId, reminders: [] });
         }
 
         const reminders = snapshot.docs.map(doc => ({
@@ -83,7 +85,7 @@ app.get('/reminders/:userId', async (req, res) => {
             ...doc.data()
         }));
 
-        console.log('Reminders retrieved for userId:', userId);
+        console.log('Reminders retrieved for userId:', userId, reminders);
         res.json({ userId, reminders });
     } catch (error) {
         console.error('Error fetching reminders:', error);
