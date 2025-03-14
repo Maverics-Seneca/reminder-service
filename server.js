@@ -1,4 +1,3 @@
-// reminder-service (app.js)
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
@@ -36,6 +35,37 @@ admin.initializeApp({
 
 const db = admin.firestore();
 
+// Logging function
+async function logChange(action, userId, entity, entityId, entityName, details = {}) {
+  try {
+    // Fetch user name from users collection
+    let userName = 'Unknown';
+    try {
+      const userDoc = await db.collection('users').doc(userId).get();
+      if (userDoc.exists) {
+        userName = userDoc.data().name || 'Unnamed User';
+      }
+    } catch (error) {
+      console.error(`Error fetching user ${userId}:`, error);
+    }
+
+    const logEntry = {
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      action,
+      userId: userId || 'unknown',
+      userName,
+      entity,
+      entityId,
+      entityName: entityName || 'N/A',
+      details,
+    };
+    await db.collection('logs').add(logEntry);
+    console.log(`Logged: ${action} on ${entity} (${entityId}, ${entityName}) by ${userId} (${userName})`);
+  } catch (error) {
+    console.error('Error logging change:', error);
+  }
+}
+
 // Create a Reminder
 app.post('/reminders', async (req, res) => {
     const { userId, title, description, datetime } = req.body;
@@ -57,6 +87,7 @@ app.post('/reminders', async (req, res) => {
         const docRef = await db.collection('reminders').add(reminderData);
         const newReminder = { reminderId: docRef.id, ...reminderData };
 
+        await logChange('CREATE', userId, 'Reminder', docRef.id, title, { data: reminderData });
         console.log('Reminder created:', newReminder);
         res.status(201).json({ message: 'Reminder created successfully', reminder: newReminder });
     } catch (error) {
@@ -65,7 +96,7 @@ app.post('/reminders', async (req, res) => {
     }
 });
 
-// Get Reminders for a Specific User
+// Get Reminders for a Specific User (No logging needed for GET)
 app.get('/reminders/:userId', async (req, res) => {
     const { userId } = req.params;
 
@@ -110,6 +141,7 @@ app.put('/reminders/:reminderId', async (req, res) => {
             return res.status(404).json({ error: 'Reminder not found or unauthorized' });
         }
 
+        const oldData = doc.data();
         const updates = {};
         if (title) updates.title = title;
         if (description !== undefined) updates.description = description;
@@ -117,8 +149,9 @@ app.put('/reminders/:reminderId', async (req, res) => {
         if (completed !== undefined) updates.completed = completed;
 
         await reminderRef.update(updates);
-        const updatedReminder = { reminderId, ...doc.data(), ...updates };
+        const updatedReminder = { reminderId, ...oldData, ...updates };
 
+        await logChange('UPDATE', userId, 'Reminder', reminderId, title || oldData.title, { oldData, newData: updates });
         console.log('Reminder updated:', updatedReminder);
         res.json({ message: 'Reminder updated successfully', reminder: updatedReminder });
     } catch (error) {
@@ -144,7 +177,10 @@ app.delete('/reminders/:reminderId', async (req, res) => {
             return res.status(404).json({ error: 'Reminder not found or unauthorized' });
         }
 
+        const reminderData = doc.data();
+        await logChange('DELETE', userId, 'Reminder', reminderId, reminderData.title, { data: reminderData });
         await reminderRef.delete();
+
         console.log('Reminder deleted:', reminderId);
         res.json({ message: 'Reminder deleted successfully' });
     } catch (error) {
