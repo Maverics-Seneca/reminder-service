@@ -1,11 +1,17 @@
+// Import required modules
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const admin = require('firebase-admin');
+
+// Initialize Express app
 const app = express();
 const PORT = 4005;
 
+// Load environment variables
 dotenv.config();
+
+// Middleware setup
 app.use(express.json());
 app.use(cors({
     origin: 'http://middleware:3001',
@@ -15,6 +21,7 @@ app.use(cors({
 // Initialize Firebase
 const firebaseCredentials = process.env.FIREBASE_CREDENTIALS;
 
+// Validate Firebase credentials
 if (!firebaseCredentials) {
     console.error('FIREBASE_CREDENTIALS environment variable is not set');
     process.exit(1); // Exit if credentials are missing
@@ -35,41 +42,61 @@ admin.initializeApp({
 
 const db = admin.firestore();
 
-// Logging function
-async function logChange(action, userId, entity, entityId, entityName, details = {}) {
-  try {
-    // Fetch user name from users collection
-    let userName = 'Unknown';
-    try {
-      const userDoc = await db.collection('users').doc(userId).get();
-      if (userDoc.exists) {
-        userName = userDoc.data().name || 'Unnamed User';
-      }
-    } catch (error) {
-      console.error(`Error fetching user ${userId}:`, error);
-    }
+// Utility Functions
 
-    const logEntry = {
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
-      action,
-      userId: userId || 'unknown',
-      userName,
-      entity,
-      entityId,
-      entityName: entityName || 'N/A',
-      details,
-    };
-    await db.collection('logs').add(logEntry);
-    console.log(`Logged: ${action} on ${entity} (${entityId}, ${entityName}) by ${userId} (${userName})`);
-  } catch (error) {
-    console.error('Error logging change:', error);
-  }
+/**
+ * Logs changes to Firestore for auditing purposes.
+ * @param {string} action - The action performed (e.g., CREATE, UPDATE, DELETE).
+ * @param {string} userId - The ID of the user performing the action.
+ * @param {string} entity - The entity being modified (e.g., 'Reminder').
+ * @param {string} entityId - The ID of the entity being modified.
+ * @param {string} entityName - The name of the entity being modified.
+ * @param {object} details - Additional details about the change.
+ */
+async function logChange(action, userId, entity, entityId, entityName, details = {}) {
+    try {
+        // Fetch user name from users collection
+        let userName = 'Unknown';
+        try {
+            const userDoc = await db.collection('users').doc(userId).get();
+            if (userDoc.exists) {
+                userName = userDoc.data().name || 'Unnamed User';
+            }
+        } catch (error) {
+            console.error(`Error fetching user ${userId}:`, error);
+        }
+
+        const logEntry = {
+            timestamp: admin.firestore.FieldValue.serverTimestamp(),
+            action,
+            userId: userId || 'unknown',
+            userName,
+            entity,
+            entityId,
+            entityName: entityName || 'N/A',
+            details,
+        };
+        await db.collection('logs').add(logEntry);
+        console.log(`Logged: ${action} on ${entity} (${entityId}, ${entityName}) by ${userId} (${userName})`);
+    } catch (error) {
+        console.error('Error logging change:', error);
+    }
 }
 
-// Create a Reminder
+// API Endpoints
+
+/**
+ * Create a new reminder.
+ * @route POST /reminders
+ * @param {string} userId - The ID of the user creating the reminder.
+ * @param {string} title - The title of the reminder.
+ * @param {string} description - The description of the reminder (optional).
+ * @param {string} datetime - The date and time of the reminder.
+ */
 app.post('/reminders', async (req, res) => {
     const { userId, title, description, datetime } = req.body;
 
+    // Input validation
     if (!userId || !title || !datetime) {
         return res.status(400).json({ error: 'User ID, title, and datetime are required' });
     }
@@ -96,7 +123,11 @@ app.post('/reminders', async (req, res) => {
     }
 });
 
-// Get Reminders for a Specific User (No logging needed for GET)
+/**
+ * Get reminders for a specific user.
+ * @route GET /reminders/:userId
+ * @param {string} userId - The ID of the user to fetch reminders for.
+ */
 app.get('/reminders/:userId', async (req, res) => {
     const { userId } = req.params;
 
@@ -124,11 +155,21 @@ app.get('/reminders/:userId', async (req, res) => {
     }
 });
 
-// Update a Reminder
+/**
+ * Update a reminder.
+ * @route PUT /reminders/:reminderId
+ * @param {string} reminderId - The ID of the reminder to update.
+ * @param {string} userId - The ID of the user updating the reminder.
+ * @param {string} title - The updated title of the reminder (optional).
+ * @param {string} description - The updated description of the reminder (optional).
+ * @param {string} datetime - The updated date and time of the reminder (optional).
+ * @param {boolean} completed - The updated completion status of the reminder (optional).
+ */
 app.put('/reminders/:reminderId', async (req, res) => {
     const { reminderId } = req.params;
     const { userId, title, description, datetime, completed } = req.body;
 
+    // Input validation
     if (!userId) {
         return res.status(400).json({ error: 'User ID is required' });
     }
@@ -160,11 +201,17 @@ app.put('/reminders/:reminderId', async (req, res) => {
     }
 });
 
-// Delete a Reminder
+/**
+ * Delete a reminder.
+ * @route DELETE /reminders/:reminderId
+ * @param {string} reminderId - The ID of the reminder to delete.
+ * @param {string} userId - The ID of the user deleting the reminder.
+ */
 app.delete('/reminders/:reminderId', async (req, res) => {
     const { reminderId } = req.params;
     const { userId } = req.body;
 
+    // Input validation
     if (!userId) {
         return res.status(400).json({ error: 'User ID is required' });
     }
@@ -194,6 +241,7 @@ app.get('/health', (req, res) => {
     res.json({ status: 'Reminder Service is running' });
 });
 
+// Start the server
 app.listen(PORT, () => {
     console.log(`Reminder Service running on port ${PORT}`);
 });
