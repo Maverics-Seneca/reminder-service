@@ -85,6 +85,43 @@ async function logChange(action, userId, entity, entityId, entityName, details =
 
 // API Endpoints
 
+
+/**
+ * Fetch all reminders for an organization
+ * @route GET /api/reminders/all
+ * @description Fetch all reminders for patients in a given organization
+ */
+app.get('/api/reminders/all', async (req, res) => {
+    const { organizationId } = req.query;
+    console.log('Fetching all reminders for organizationId:', organizationId);
+
+    try {
+        const patientsSnapshot = await db.collection('users')
+            .where('organizationId', '==', organizationId)
+            .where('role', '==', 'user')
+            .get();
+
+        if (patientsSnapshot.empty) {
+            console.log('No patients found for organizationId:', organizationId);
+            return res.json([]);
+        }
+
+        const patientIds = patientsSnapshot.docs.map(doc => doc.id);
+        const remindersSnapshot = await db.collection('reminders')
+            .where('userId', 'in', patientIds.length > 0 ? patientIds : ['none'])
+            .orderBy('datetime', 'asc')
+            .get();
+
+        const reminders = remindersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        console.log('Reminders retrieved for organization:', reminders);
+        res.json(reminders);
+    } catch (error) {
+        console.error('Error fetching all reminders:', error.message);
+        res.status(500).json([]);
+    }
+});
+
+
 /**
  * Create a new reminder.
  * @route POST /reminders
